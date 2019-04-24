@@ -7,6 +7,7 @@ Created on Wed Jan 04 17:59:02 2017
 from load_data import DBConnect
 from matplotlib import rc
 from mpl_toolkits.mplot3d import Axes3D
+from os import chdir
 from sklearn.decomposition import PCA
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics import silhouette_score
@@ -17,13 +18,15 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
+chdir('D:\Git\Filials_Clusterization')
+
 # для корректного отображения кириллицы
 font = {'family': 'Verdana',
         'weight': 'normal'}
 rc('font', **font)
 
 # Loading data
-business = '' # business name
+business = 'Фора' # business name
 
 with DBConnect() as dbc:
     data = dbc.get_data(3, business)
@@ -38,14 +41,34 @@ with DBConnect() as dbc:
 feautures_num = data.shape[1] - 3 # number of ID after data import
 
 #%%
+# identify stable data
+stable = np.ma.masked_equal(data[:, 2], 1)
+data_scaled = scale(data[stable.mask, 3:], axis=1)
+data_cleared = data[np.where(data[:, 2] == 1)]
 
-def plot_clusters(n_clusters, reduced_data, labels, title):
+# not used in current version
+#data_scaled = data_scaled_all[stable.mask, :]
+
+# staorage for data after PCA decomposition
+reduced_data = {}
+
+
+#%%
+
+#################################################
+#            Functions for plotting             #
+#################################################
+
+# plot functions aren't stored in separate module because they use global variables
+
+def plot_clusters(n_clusters, reduced_data, labels, title, save_fig=False):
     ''' 2D plot of clustered data.
         Input:
         n_clusters: int - number of clusters;
         reduced_data: (x, 2) shape array - data to plot;
         labels: (x) shape array - list of clusters;
-        title: string - title of plot.
+        title: string - title of plot;
+        save_fig: boolean - save fig as png if True.
     '''
     fig = plt.gcf()
     fig.set_size_inches(15, 10)
@@ -81,7 +104,8 @@ def plot_clusters(n_clusters, reduced_data, labels, title):
               u'Кол-во кластеров: {}'.format(n_clusters))
 
     plt.show()
-    #plt.savefig('KMeans_{}_PCA_scaled.png'.format(clusters))
+    if save_fig:
+        plt.savefig('KMeans_{}_PCA_scaled.png'.format(clusters))
     plt.close(fig)
 
 
@@ -136,21 +160,6 @@ def plot_clusters_3D(n_clusters, reduced_data, labels, title, region=None):
     plt.show()
     plt.close(fig)
 
-#%%
-# identify satable data
-stable = np.ma.masked_equal(data[:, 2], 1)
-data_scaled = scale(data[stable.mask, 3:], axis=1)
-data_cleared = data[np.where(data[:, 2] == 1)]
-
-# not used at this time
-#data_scaled = data_scaled_all[stable.mask, :]
-
-# staorage for data after PCA decomposition
-reduced_data = {}
-
-
-
-#%%
 
 def plot_rc_bindings():
     ''' Function to plot all filials with color, respectively to binded RC.
@@ -188,6 +197,75 @@ def plot_rc_bindings():
     plt.show()
     plt.close(fig)
 
+
+# plot data with outliers
+def plot_with_outliers(reduced_data, outliers):
+    ''' Plot reduced data with outliers.
+        Input:
+        reduced_data: (x, 2) shape array - data to plot;
+        outliers: (x, 1) mask array - bit array of ouliers.
+    '''
+    fig = plt.gcf()
+    fig.set_size_inches(15, 10)
+
+
+    xy = reduced_data[0][outliers.mask]
+    fils, = plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor='g',
+                 markeredgecolor='k', markersize=16, label=u'Филиалы')
+
+    xy = reduced_data[0][~outliers.mask]
+    fils_out, = plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor='k',
+                 markeredgecolor='k', markersize=10, label=u'Исключения')
+
+    # labels for outliers
+    for outlier, filID in zip(xy, data_cleared[~outliers.mask][:, 0]):
+        #skew = 0.05 if data_cleared[low, 0] != 518 else -0.25
+        plt.text(outlier[0]+0.05, outlier[1]+0.1, filials[int(filID)],
+                     #color=plt.cm.spectral(labels[i] / float(n_clusters)),
+                     fontdict={'weight': 'bold', 'size': 10})
+
+    plt.legend(handles=(fils, fils_out))
+
+    plt.title(u'Филиалы-outliers, не подлежащие дальнейшей кластеризации\n'
+            u'(Бизнес {})'.format(business))
+
+    plt.show()
+    plt.close(fig)
+    region = None
+
+
+def plot_cluster_versions(cluster_data, region=None, dim=2):
+    ''' Plots clusters, PCA reduced to dim dimentions.
+        Input:
+        cluster_data - tuple: tuple of (number of clusters, seed) tuples;
+        region - int: None if i-th tuple in cluster_data corresponds to region,
+            number = n - if all data in cluster_data are from the n-th cluster;
+        dim - int: 2 or 3 - dimension of plot.
+    '''
+    for i, cdata in enumerate(cluster_data, 1):
+        if region:
+            i = region
+        data_scaled_ready = data_scaled[reg[i].mask, :][outliers[i].mask]
+        #filIDs = data_cleared[reg[i].mask, :][outliers[i].mask][:, 0]
+        n_clusters = cdata[0]
+
+        kmeans[i] = KMeans(init='k-means++', n_clusters=n_clusters, n_init=100, random_state=cdata[1])
+        kmeans[i].fit(data_scaled_ready) # reduced_data or data_scaled
+        silhouette_avg = silhouette_score(data_scaled_ready, kmeans[i].labels_)
+        print ("Region:{}. The average silhouette_score is :{}".format(regions[i], silhouette_avg))
+
+        labels = np.hstack((kmeans[i].labels_, np.arange(n_clusters)))
+        Title = 'Регион {0}. K-means'.format(regions[i])
+
+        if dim == 2:
+            reduced_data = PCA(n_components=dim).fit_transform(
+                    np.vstack((data_scaled_ready, kmeans[i].cluster_centers_)))
+            plot_clusters(n_clusters, reduced_data, labels, Title)
+
+        if dim == 3:
+            reduced_data = PCA(n_components=dim).fit_transform(data_scaled[reg[region].mask, :])
+            plot_clusters_3D(n_clusters, reduced_data, labels, Title, region=i)
+
 #%%
 
 #################################################
@@ -204,33 +282,7 @@ reduced_data[0] = PCA(n_components=2).fit_transform(data_scaled)
 #%%
 
 # plot data with outliers
-fig = plt.gcf()
-fig.set_size_inches(15, 10)
-
-
-xy = reduced_data[0][outliers.mask]
-fils, = plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor='g',
-             markeredgecolor='k', markersize=16, label=u'Филиалы')
-
-xy = reduced_data[0][~outliers.mask]
-fils_out, = plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor='k',
-             markeredgecolor='k', markersize=10, label=u'Исключения')
-
-# labels for outliers
-for outlier, filID in zip(xy, data_cleared[~outliers.mask][:, 0]):
-    #skew = 0.05 if data_cleared[low, 0] != 518 else -0.25
-    plt.text(outlier[0]+0.05, outlier[1]+0.1, filials[int(filID)],
-                 #color=plt.cm.spectral(labels[i] / float(n_clusters)),
-                 fontdict={'weight': 'bold', 'size': 10})
-
-plt.legend(handles=(fils, fils_out))
-
-plt.title(u'Филиалы-outliers, не подлежащие дальнейшей кластеризации\n'
-        u'(Бизнес {})'.format(business))
-
-plt.show()
-plt.close(fig)
-region = None
+plot_with_outliers(reduced_data, outliers)
 
 #%%
 
@@ -319,7 +371,10 @@ def plot_cluster_one_region(n_clusters, seed, dim=2):
 # storage for current run agter choosing appropriate seed and clustersnumber
 
 # data from silhouettes (F)
-plot_cluster_one_region(n_clusters=5, seed=66129, dim=2)
+#plot_cluster_one_region(n_clusters=5, seed=66129, dim=2)
+
+# data from silhouettes (F)
+plot_cluster_one_region(n_clusters=5, seed=84846, dim=2)
 
 # data from silhouettes (T)
 #plot_cluster_one_region(n_clusters=3, seed=81829, dim=2)
@@ -638,37 +693,7 @@ cluster_data = ((3, 8012), (3, 7941), (3, 2394), (3, 5532), (5, 5253))
 # storage of the trained K-means
 kmeans = {}
 
-def plot_cluster_versions(cluster_data, region=None, dim=2):
-    ''' Plots clusters, PCA reduced to dim dimentions.
-        Input:
-        cluster_data - tuple: tuple of (number of clusters, seed) tuples;
-        region - int: None if i-th tuple in cluster_data corresponds to region,
-            number = n - if all data in cluster_data are from the n-th cluster;
-        dim - int: 2 or 3 - dimension of plot.
-    '''
-    for i, cdata in enumerate(cluster_data, 1):
-        if region:
-            i = region
-        data_scaled_ready = data_scaled[reg[i].mask, :][outliers[i].mask]
-        #filIDs = data_cleared[reg[i].mask, :][outliers[i].mask][:, 0]
-        n_clusters = cdata[0]
 
-        kmeans[i] = KMeans(init='k-means++', n_clusters=n_clusters, n_init=100, random_state=cdata[1])
-        kmeans[i].fit(data_scaled_ready) # reduced_data or data_scaled
-        silhouette_avg = silhouette_score(data_scaled_ready, kmeans[i].labels_)
-        print ("Region:{}. The average silhouette_score is :{}".format(regions[i], silhouette_avg))
-
-        labels = np.hstack((kmeans[i].labels_, np.arange(n_clusters)))
-        Title = 'Регион {0}. K-means'.format(regions[i])
-
-        if dim == 2:
-            reduced_data = PCA(n_components=dim).fit_transform(
-                    np.vstack((data_scaled_ready, kmeans[i].cluster_centers_)))
-            plot_clusters(n_clusters, reduced_data, labels, Title)
-
-        if dim == 3:
-            reduced_data = PCA(n_components=dim).fit_transform(data_scaled[reg[region].mask, :])
-            plot_clusters_3D(n_clusters, reduced_data, labels, Title, region=i)
 
 # disable region for the final run
 plot_cluster_versions(cluster_data, region=None, dim=2)
