@@ -4,10 +4,13 @@ Created on Wed Jan 04 17:59:02 2017
 @author: Vadim Shkaberda
 """
 
+from os import chdir
+chdir('D:\Git\Filials_Clusterization')
+
 from load_data import DBConnect
 from matplotlib import rc
 from mpl_toolkits.mplot3d import Axes3D
-from os import chdir
+
 from sklearn.decomposition import PCA
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.metrics import silhouette_score
@@ -18,7 +21,6 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
-chdir('D:\Git\Filials_Clusterization')
 
 # для корректного отображения кириллицы
 font = {'family': 'Verdana',
@@ -26,7 +28,7 @@ font = {'family': 'Verdana',
 rc('font', **font)
 
 # Loading data
-business = 'Фора' # business name
+business = '' # business name
 
 with DBConnect() as dbc:
     data = dbc.get_data(3, business)
@@ -224,14 +226,13 @@ def plot_with_outliers(reduced_data, outliers):
                      #color=plt.cm.spectral(labels[i] / float(n_clusters)),
                      fontdict={'weight': 'bold', 'size': 10})
 
-    plt.legend(handles=(fils, fils_out))
+    plt.legend(handles=(fils, fils_out), loc='lower right')
 
     plt.title(u'Филиалы-outliers, не подлежащие дальнейшей кластеризации\n'
             u'(Бизнес {})'.format(business))
 
     plt.show()
     plt.close(fig)
-    region = None
 
 
 def plot_cluster_versions(cluster_data, region=None, dim=2):
@@ -290,7 +291,7 @@ plot_with_outliers(reduced_data, outliers)
 start_time = time()
 
 data_scaled_ready = data_scaled[outliers.mask]
-cluster_limit = 7
+cluster_limit = 12
 
 silhouettes = np.zeros((cluster_limit - 2, 4))
 clusters = range(2, cluster_limit)
@@ -368,16 +369,16 @@ def plot_cluster_one_region(n_clusters, seed, dim=2):
         reduced_data = PCA(n_components=dim).fit_transform(data_scaled)
         plot_clusters_3D(n_clusters, reduced_data, labels, Title)
 
-# storage for current run agter choosing appropriate seed and clustersnumber
-
-# data from silhouettes (F)
-#plot_cluster_one_region(n_clusters=5, seed=66129, dim=2)
-
-# data from silhouettes (F)
-plot_cluster_one_region(n_clusters=5, seed=84846, dim=2)
+# storage for current run after choosing appropriate seed and clustersnumber
 
 # data from silhouettes (T)
-#plot_cluster_one_region(n_clusters=3, seed=81829, dim=2)
+#plot_cluster_one_region(n_clusters=2, seed=86905, dim=2)
+
+# data from silhouettes (T)
+#plot_cluster_one_region(n_clusters=3, seed=39572, dim=2)
+
+# data from silhouettes (F)
+plot_cluster_one_region(n_clusters=4, seed=97937, dim=2)
 
 #%%
 ''' Plot all centroids.
@@ -415,10 +416,10 @@ unstable_clusters = np.zeros(stable.count())
 
 for i, fil in enumerate(data[~stable.mask, :]):
     # Mask for stable months
-    #fil_mask = np.ma.masked_not_equal(fil[3:], 0)
-    # In case of NaN instead of zeros use next mask for stable months
-    fil_mask = np.ma.masked_invalid(fil[3:])
-    fil_mask.mask = np.invert(fil_mask.mask)
+    fil_mask = np.ma.masked_not_equal(fil[3:], 0)
+    # In case of NaN instead of zeros use next mask for stable months + invert
+    #fil_mask = np.ma.masked_invalid(fil[3:])
+    #fil_mask.mask = np.invert(fil_mask.mask)
     # Scaled data of stable months for filial
     fil_stable = scale(fil[3:][fil_mask.mask])
     # Creating scaled clusters
@@ -432,7 +433,7 @@ for i, fil in enumerate(data[~stable.mask, :]):
 #%%
 
 # Writing final data (in brackets - number of clusters according to the last run)
-file_to_write = 'output_Kmeans_Pallets_' + business + '_2018.csv'
+file_to_write = 'output_Kmeans_m3_' + business + '_2019.csv'
 
 with open(file_to_write, 'w') as f:
     f.write('FilID;FilialName;MacroRegionName;Stable;Outlier;Cluster;ClusterID\n')
@@ -486,12 +487,12 @@ with open(file_to_write, 'a') as f:
 label = 2
 
 new_mask = np.ma.masked_equal(kmeans.labels_, label)
-X = data_scaled[new_mask.mask, :]
+X = data_scaled[outliers.mask][new_mask.mask, :]
 
 x_plot = np.arange(1, feautures_num+1)
 lw = 2
 
-for row, filid in zip(X, data_cleared[new_mask.mask, 0]):
+for row, filid in zip(X, data_cleared[outliers.mask][new_mask.mask, 0]):
 
     fig = plt.gcf()
 
@@ -567,16 +568,20 @@ plt.close(fig)
 outliers = {}
 
 for i in range(1, 6):
-#    if i == 2 or i == 4:
-#        eps = 2.75
+#    if i == 2:
+#        eps = 3.
+#    if i == 5:
+#        eps = 2.25
 #    else:
-    eps = 2.25# if not (i == 4) else 2.4
+#        eps = 2.75
+    eps = 2.7 if not (i == 5) else 2.4
     db = DBSCAN(eps=eps, min_samples=3, algorithm='brute').fit(data_scaled[reg[i].mask, :])
     outliers[i] = np.ma.masked_not_equal(db.labels_, -1)
 
-outliers[4].mask[np.where(data_cleared[reg[4].mask, 0] == 2272)] = False
-outliers[4].mask[np.where(data_cleared[reg[4].mask, 0] == 2273)] = False
-outliers[4].mask[np.where(data_cleared[reg[4].mask, 0] == 2280)] = False
+outliers[1].mask[np.where(data_cleared[reg[1].mask, 0] == 2156)] = True
+outliers[2].mask[np.where(data_cleared[reg[2].mask, 0] == 2218)] = True
+outliers[2].mask[np.where(data_cleared[reg[2].mask, 0] == 2238)] = True
+outliers[2].mask[np.where(data_cleared[reg[2].mask, 0] == 2248)] = True
 
 #%%
 
@@ -592,7 +597,7 @@ for i, sp in enumerate(subplots, 1):
     axarr[sp].plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor='k',
                  markeredgecolor='k', markersize=10)
     for outlier, filID in zip(xy, data_cleared[reg[i].mask, :][~outliers[i].mask][:, 0]):
-        skew = -0.35 if int(filID) == 2154 else 0.1
+        skew = -0.35 if int(filID) == 2078 else -0.1 if int(filID) == 2072 else 0.1
         axarr[sp].text(outlier[0]+0.05, outlier[1]+skew, filials[int(filID)],
                      #color=plt.cm.spectral(labels[i] / float(n_clusters)),
                      fontdict={'weight': 'bold', 'size': 8})
@@ -610,8 +615,8 @@ plt.close(fig)
 #%%
 
 # parameters for clusterization
-region = 4
-cluster_limit = 9
+region = 1
+cluster_limit = 12
 
 # compute clusters
 start_time = time()
@@ -674,26 +679,16 @@ plt.close(fig)
 
 #%%
 
-# storage for current run agter choosing appropriate seed and clustersnumber
+# storage for current run after choosing appropriate seed and clustersnumber
 # cluster_data[number of clusters, seed] - order of final decision is Region order
-cluster_data = ((5, 8332))
+cluster_data = ((6, 1900),)
 
-# Pallets
-#cluster_data = ((3, 9742), (3, 2137), (4, 3872), [(3, 5146), (4, 4415), (5, 2066)], [(5, 8506), (6, 7778), (7, 4943)])
-
-# Final data M3 V1
-cluster_data = ((3, 8012), (3, 7941), (4, 3348), (4, 1152), (7, 5756))
-
-# Final data M3 V2
-cluster_data = ((3, 8012), (3, 7941), (3, 2394), (4, 1152), (5, 5253))
-
-# Final data M3 V2
-cluster_data = ((3, 8012), (3, 7941), (3, 2394), (3, 5532), (5, 5253))
+# Final data M3 V1, V2
+#cluster_data = ((3, 9196), (3, 2697), (3, 6124), (3, 7067), (5, 5630))
+cluster_data = ((3, 9196), (4, 9931), (5, 4075), (3, 7067), (6, 1900))
 
 # storage of the trained K-means
 kmeans = {}
-
-
 
 # disable region for the final run
 plot_cluster_versions(cluster_data, region=None, dim=2)
@@ -722,10 +717,10 @@ unstable_clusters = np.zeros(stable.count())
 
 for i, fil in enumerate(data[~stable.mask, :]):
     # Mask for stable months
-    #fil_mask = np.ma.masked_not_equal(fil[3:], 0)
-    # In case of NaN instead of zeros use next mask for stable months
-    fil_mask = np.ma.masked_invalid(fil[3:])
-    fil_mask.mask = np.invert(fil_mask.mask)
+    fil_mask = np.ma.masked_not_equal(fil[3:], 0)
+    # In case of NaN instead of zeros use next mask for stable months + invert
+    #fil_mask = np.ma.masked_invalid(fil[3:])
+    #fil_mask.mask = np.invert(fil_mask.mask)
     # Scaled data of stable months for filial
     fil_stable = scale(fil[3:][fil_mask.mask])
     # Creating scaled clusters
@@ -740,7 +735,9 @@ for i, fil in enumerate(data[~stable.mask, :]):
 #%%
 
 # Writing final data (in brackets - number of clusters according to the last run)
-file_to_write = 'output_Kmeans_m3_' + business + '_2018(3,3,3,3,5).csv'
+file_to_write = ('output_Kmeans_m3_' + business +
+                 '_2019{}.csv'.format(tuple(i[0] for i in cluster_data))
+                 )
 
 with open(file_to_write, 'w') as f:
     f.write('FilID;FilialName;MacroRegionName;Stable;Outlier;Cluster;ClusterID\n')
